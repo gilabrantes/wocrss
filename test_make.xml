@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">
+  <channel>
+    <title>Cadeira X</title>
+    <link>http://www.dei.uc.pt</link>
+    <description>Feed do woc</description>
+    <item>
+      <title>Hey i'm the second item</title>
+      <link>http://www.sapo.pt</link>
+      <pubDate>Tue, 23 Sep 2008 02:09:37 +0100</pubDate>
+    </item>
+    <item>
+      <title>Hey, i'm the first one</title>
+      <link>http://www.google.com</link>
+      <enclosure type="application/octet-stream"
+        url="http://blog.makezine.com/crackerBoxAmp09.jpg"
+        length="1000"/>
+      <pubDate>Fri, 01 Feb 2008 23:12:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>
