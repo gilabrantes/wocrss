@@ -7,6 +7,7 @@ require "rss/maker"
 require 'rack'
 require 'thread'
 require 'sqlite3'
+require 'monitor.rb'
 
 class WocFile
 	
@@ -54,27 +55,25 @@ class WocWorker
  	   		when /^&nbsp;$/
 	   			next
  	   		when /<strong>.*<\/strong>$/
-	   			#puts 1
 	   			#title
+				#puts 1
 	   			tmp = WocFile.new
 	   			tmp.title = td.inner_html.match(/<strong>(.*)<\/strong>/)[1]
 	   		when /<strong>Tema: <\/strong>(.*)/
 	   			#description
- 	   			#puts td.inner_html.squeeze("\n")
-	   			#TODO description
-	   			#puts 2
+		   		#puts 2
+				desc = td.inner_html.match(/\s*<strong>Tema: <\/strong>\s*(.*)\s*/)[1]
+	   			tmp.description = desc
    	   		when /.*<a href=.*/
 	   			#download_link
+	   			#puts 4
 	   			download_link = td.inner_html.match(/.*<a href="(.*)"(.|\n)*/)[1]
 	   			link_bits = download_link.match(/\/weboncampus\/getFile.do\?tipo=(\d*)&id=(\d*)/)
 	   			tmp.file_type = link_bits[1]
 	   			tmp.file_id = link_bits[2]
 	   			date = td.inner_html.match(/(\d{4}-\d{2}-\d{2})/)[1]
-#	   			puts "DATE #{date}"
-#	   			puts "DATE NULL?#{date || Time.now.to_s}"
 	   			tmp.published_at = date
    	   			@materials << tmp
-	   			#puts 4
 	   		else
 	   			#sec_description
 	   			#puts 3
@@ -99,10 +98,10 @@ class WocWorker
 				tmp.title = td.inner_html.match(/<strong>(.*)<\/strong>/)[1]
 			when /\s*<table(.|\n)*/
 				next
-			when />\d{4}-\d{2}-\d{2}</
-				date = td.inner_html.match(/(\d{4}-\d{2}-\d{2})/)[1]
-				tmp.published_at = date
-				next
+		    when />\d{4}-\d{2}-\d{2}</
+		    	date = td.inner_html.match(/(\d{4}-\d{2}-\d{2})/)[1]
+		    	tmp.published_at = date
+		    	next
 			when /.*<a href=(.|\n)*/
 				download_link = td.inner_html.match(/.*<a href="(.*)"(.|\n)*/)[1]
 				link_bits = download_link.match(/\/weboncampus\/getFile.do\?tipo=(\d*)&id=(\d*)/)
@@ -184,7 +183,6 @@ class MirrorWorker
 		begin
 			file_data = @woc_worker.get_file(woc_file.file_id, woc_file.file_type)
 			file_data << woc_file.published_at
-			#puts "LOOOOOOOOOOOOL #{file_data[3]} #{file_data[0]}"
 		rescue
 			@download_retries -= 1
 			retry unless @download_retries >= 0
@@ -217,27 +215,57 @@ CONFIG = YAML.load(File.open("woc2rss.yml"))
 
 COURSES = CONFIG["courses"]
 YEARS = CONFIG["years"]
-
+#$ITEMS = 0
 #@worker = WocWorker.new(CONFIG['url'])
 #@worker.login!(CONFIG['username'], CONFIG['password'])
-#@worker.get_file(2,6180)
-#b = @worker.get_generic_list("material", "419", "5")[0]
-#puts b.published_at
-#puts b.file_id
-#puts b.description
-
+#materialitems = Array.new
+#materialavaitems = Array.new
+#projects = Array.new
+#materialitems = @worker.get_generic_list("material", "422", "5")
+#materialavaitems += @worker.get_generic_list("materialavaliation", "422", "5")
+#projects += @worker.get_projects_list("422", "5")
+#
+#puts "meterial"
+#materialitems.each do |item|
+#	puts item.title 
+#end
+#$ITEMS += materialitems.size
+#puts materialitems.size
+#puts ".----------------------------------"
+#puts "meterial avaliacao"
+#materialavaitems.each do |item|
+#	puts item.title
+#end
+#$ITEMS += materialavaitems.size
+#puts materialavaitems.size
+#puts ".----------------------------------"
+#puts "meterial avaliacao"
+#projects.each do |item|
+#	puts item.title
+#end
+#$ITEMS += projects.size
+#	puts projects.size
+#	
+#puts "TOTAL #{$ITEMS}"
+#	419 -> 39
+# 	422 -> 27
 class WocRssBuilder
 	
 	def initialize(course_id, year_id, env)
+		#puts "GO!"
 		@env = env
-		@mirror_items_complete = false
 		@course_id = course_id
 		@year_id = year_id
-		@resources_missing = 3 #projects, material and avaliation material
 		@worker_num = CONFIG["mirror_workers"]
+		@missing_workers = @worker_num
 		#woc queue
 		@woc_items = Array.new
 		@woc_mutex = Mutex.new
+		@missing_producers = 3 #projects, material and avaliation material
+		@producers_mutex = Mutex.new
+		@producers_cv = ConditionVariable.new
+		@workers_mutex = Mutex.new
+		@workers_cv = ConditionVariable.new
 		#mirror queue
 		@mirror_items = Array.new
 		@mirror_mutex = Mutex.new
@@ -249,129 +277,146 @@ class WocRssBuilder
 	def build_rss
 
 		#spawn one thread to download the material avaliation items
-		#@woc_workers << Thread.new do
+		@woc_workers << Thread.new do
 			woc_worker = WocWorker.new(CONFIG['url'])
 			woc_worker.login!(CONFIG['username'], CONFIG['password'])
 			items = woc_worker.get_generic_list("materialavaliation", @course_id, @year_id)
-		#	@woc_mutex.synchronize {
+			@woc_mutex.synchronize {
 				@woc_items += items
-		#		puts "bota items!"
-				@resources_missing -= 1
-		#		puts "signal!"
-		#		@woc_cv.signal
-		#	}
-		#end
+			}
+			@producers_mutex.synchronize {
+				@missing_producers -= 1
+				@producers_cv.signal
+			}
+		end
 		
-		puts "proxima thread!"
 		#spawn one thread to download the material items
-		#@woc_workers << Thread.new do
-		#	woc_worker = WocWorker.new(CONFIG['url'])
-		#	woc_worker.login!(CONFIG['username'], CONFIG['password'])
+		@woc_workers << Thread.new do
+			woc_worker = WocWorker.new(CONFIG['url'])
+			woc_worker.login!(CONFIG['username'], CONFIG['password'])
 			items = woc_worker.get_generic_list("material", @course_id, @year_id)
-		#	@woc_mutex.synchronize {
+			@woc_mutex.synchronize {
 				@woc_items += items
-		#		puts "bota items!"
-				@resources_missing -= 1
-		#		puts "signal!"
-		#		@woc_cv.signal
-		#	}
-		#end
+			}
+			@producers_mutex.synchronize {
+				@missing_producers -= 1
+				@producers_cv.signal
+			}
+		end
 		
-		puts "proxima thread2!"
 		#spawn one thread to download the project items
-		#@woc_workers << Thread.new do
-		#	woc_worker = WocWorker.new(CONFIG['url'])
-		#	woc_worker.login!(CONFIG['username'], CONFIG['password'])
+		@woc_workers << Thread.new do
+			woc_worker = WocWorker.new(CONFIG['url'])
+			woc_worker.login!(CONFIG['username'], CONFIG['password'])
 			items = woc_worker.get_projects_list(@course_id, @year_id)
-		#	@woc_mutex.synchronize {
+			@woc_mutex.synchronize {
 				@woc_items += items
-		#		puts "bota items!"
-				@resources_missing -= 1
-		#		puts "signal!"
-		#		@woc_cv.signal
-		#	}
-		#end
+			}
+			@producers_mutex.synchronize {
+				@missing_producers -= 1
+				@producers_cv.signal
+			}
+		end
+		
+		#wait for all resources
+		@producers_mutex.synchronize {
+			while @missing_producers > 0 do
+				@producers_cv.wait(@producers_mutex)
+			end
+		}
 
 		#spawn worker_num threads to mirror the woc items
-		#@worker_num.times do
+		@worker_num.times do
 			@mirror_workers << Thread.new(MirrorWorker.new) do |mirror_worker|
 			begin
+				items_num = 0
 				#threads die when all resources were consumed
+				@woc_mutex.synchronize {
+					items_num = @woc_items.size
+				}
 				
-				#Wait for some items to be produced
-				loop do
+				while items_num > 0 do
 					#puts "estou a espera do woc_mutex"
 					@woc_mutex.synchronize {
-						while @woc_items.empty?
-							#puts "empty! waiting for woc_cv..."
-							if @resources_missing > 0
-								sleep 1
-								#@woc_cv.wait(@woc_mutex)
-							else
-								Thread.current.exit
-							end
-						end
-						
-						#puts "SIZE: #{@woc_items.size}"
 						@item = @woc_items.pop
-						#puts "SIZE: #{@woc_items.size}"
 					}
-					#puts "sai do woc_mutex"
-				 	
-					#puts "FILEID: #{@item.title}"
 					
 					file_row = mirror_worker.mirror_filename(@item)
 					@item.filename = file_row[0]
 					@item.file_length = file_row[1]
-					#puts "estou a espera do mirror_mutex"
-					@mirror_items << @item
-					#puts "sai do mirror_mutex"
+					
+					@mirror_mutex.synchronize {
+						@mirror_items << @item
+					}
+					
+					#update items_num
+					@woc_mutex.synchronize {
+						items_num = @woc_items.size
+					}
 				end
+				@workers_mutex.synchronize {
+					@missing_workers -= 1
+					@workers_cv.signal
+				}
 			rescue
 				abort [$!.inspect, $!.message, $!.backtrace].flatten.join("\n")
 			end
-		end
-		
-		sleep 5
-		
-		puts "building rss feed!"
-		
-		begin
-		version = "2.0"
-		content = RSS::Maker.make(version) do |m|
-			m.channel.title = CONFIG["course_names"][@course_id]
-			m.channel.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
-			m.channel.description = "Scrapped #{CONFIG['course_names'][@course_id]} feed"
-			m.items.do_sort = true
-		
 			
-			@mirror_items.each do |item|
-				item = @mirror_items.pop
-				
-				puts "HEHEH #{item.title}"	
-				puts "LOOOL #{item.file_length.to_s}"
-				
-				#build the item
-				i = m.items.new_item
-				i.title = item.title
-				i.description = "File Attached!"
-				i.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
-				i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{item.filename}"
-				i.enclosure.length = item.file_length.to_s
-				i.enclosure.type = "application/octet-stream"
-				unless item.published_at.nil?
-					i.date = Time.parse(item.published_at)
-				else
-					i.date = Time.now
-				end
 			end
 		end
-		return content.to_s
-		rescue
-			abort [$!.inspect, $!.message, $!.backtrace].flatten.join("\n")
+		
+		@workers_mutex.synchronize {
+			while @missing_workers > 0 do
+				@workers_cv.wait(@workers_mutex)
+			end
+		}
+			
+  		version = "2.0"
+  		content = RSS::Maker.make(version) do |m|
+  			m.channel.title = CONFIG["course_names"][@course_id]
+  			m.channel.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
+  			m.channel.description = "Scrapped #{CONFIG['course_names'][@course_id]} feed"
+  			m.items.do_sort = true
+  	
+			puts "array size #{@mirror_items.size}"
+		
+				while @mirror_items.size > 0 do
+  					item = @mirror_items.pop
+  			
+  				   # $ITEMS +=1
+				   # puts "--------------------ITEM #{$ITEMS}-----------------"
+  				   # puts "title: #{item.title}"
+				   # puts "link: https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
+				   # puts "enc_url: http://#{CONFIG['mirror_host']}/#{item.filename}"
+				   # puts "end_length: #{item.file_length.to_s}"
+				   # puts "date: #{item.published_at}"
+				   # puts "-----------------------------------------------------"
+			
+  					#build the item
+  					i = m.items.new_item
+  					i.title = item.title
+					#arrange description
+					composed_description = "#{item.description}<br/>" || ""
+					composed_description += item.sec_description || ""
+  					i.description = composed_description
+  					i.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
+  					i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{item.filename}"
+  					i.enclosure.length = item.file_length.to_s
+  					i.enclosure.type = "application/octet-stream"
+  					unless item.published_at.nil?
+  						i.date = Time.parse(item.published_at)
+  					else
+  						i.date = Time.now
+  					end
+  				end
+	
+			#puts "ITEMS -> #{$ITEMS}"
+			#$ITEMS = 0
 		end
+		#puts content
+		return content.to_s
 	end
-
+	
 end
 
 def translate_year(year_string)
