@@ -9,15 +9,23 @@ require 'thread'
 require 'sqlite3'
 require 'monitor.rb'
 
+#Config file is loaded
+CONFIG = YAML.load(File.open("woc2rss.yml"))
+COURSES = CONFIG["courses"]
+YEARS = CONFIG["years"]
+
+#Represent a WoC file
+#The file_id and file_type are the values used to download them from WoC
+#Published_at is used to date the rss item
+#Both description and sec_description (secondary description) are concatenated and used as description of the rss item
 class WocFile
-	
-	attr_accessor :title, :description, :sec_description, :file_id, :file_type, :filename, :file_length, :published_at
-	
+	attr_accessor :title, :description, :sec_description, :file_id, :file_type, :filename, :file_length, :published_at	
 end
 
+#WocWorker handles all the scrapping and information extraction from WoC.
 class WocWorker
 	
-	attr_accessor :conn
+	attr_accessor :conn #HTTP connection
 	
 	def initialize(url)
 		@cookies = Hash.new
@@ -26,6 +34,7 @@ class WocWorker
 		@conn.verify_mode = OpenSSL::SSL::VERIFY_NONE
 	end
 	
+	#authenticate as username/password
 	def login!(username, password)
 		check_value = self.get_check_value
 		login_data = "password=#{password}&username=#{username}&checkValue=#{check_value}"
@@ -44,6 +53,10 @@ class WocWorker
 		end
 	end
 	
+	#Get all the items from "material" type of pages and returns an array of items
+	#The valid values to list argument are "material" or "materialavaliation"
+	#
+	#NOTE: This should use an authenticated worker
 	def get_generic_list(list, file_id, year_id)
 		#https://www.dei.uc.pt/weboncampus/class/getxxx.do?idclass=419&idyear=6
 		@materials = Array.new
@@ -85,6 +98,9 @@ class WocWorker
 		return @materials
 	end
 	
+	#Get all the items in the projects section and returns an array of projects
+	#
+	#NOTE: This should use an authenticated worker
 	def get_projects_list(class_id, year_id)
 		#https://www.dei.uc.pt/weboncampus/class/getprojects.do?idclass=419&idyear=6
 		@projects = Array.new
@@ -123,7 +139,9 @@ class WocWorker
 		return @projects
 	end
 	
-	#returns filename and filecontent
+	#Get the file by file_id and file_type and returns an array containing filename, file length, and file data
+	#
+	#NOTE: This should use an authenticated worker
 	def get_file(file_id, file_type)
 		response = self.auth_get("/weboncampus/getFile.do?tipo=#{file_type}&id=#{file_id}")
 		filename = response["content-disposition"].match(/filename="(.*)"/)[1]
@@ -133,6 +151,7 @@ class WocWorker
 	
 	protected
 	
+	#Does a authenticated get
 	def auth_get(path)
 		header = {
 			"Cookie" => "JSESSIONID=#{@cookies['JSESSIONID']}",
@@ -140,7 +159,7 @@ class WocWorker
 		return @conn.get(path, header)
 	end
 	
-	
+	#Gets the stupid check_value needed for authentication
 	def get_check_value
 		response = @conn.get("/weboncampus/")
 		self.cookiesParser(response)
@@ -148,6 +167,7 @@ class WocWorker
 		return check_value
 	end
 
+	#Parses the cookies
 	def cookiesParser(header)
 		unless header['set-cookie'].nil?
 			cookies = header['set-cookie'].split(";")
@@ -167,7 +187,7 @@ class WocWorker
 	end
 end
 
-
+#MirrorWorkers check if the file is already mirrored, if not mirror them
 class MirrorWorker
 	
 	def initialize
@@ -178,6 +198,7 @@ class MirrorWorker
 		@woc_worker.login!(CONFIG["username"], CONFIG["password"])
 	end
 	
+	#Mirror the file locally
 	def mirror_file(woc_file)
 		#download the file
 		begin
@@ -197,6 +218,8 @@ class MirrorWorker
 		return file_data		
 	end
 	
+	#Checks if the file is mirrored, and mirror in case that its not.
+	#Returns an array containing filename, file length and pucliched_at
 	def mirror_filename(woc_file)
 		file_row = @db.get_first_row("SELECT filename, length, published_at FROM mirror_files WHERE file_type = '#{woc_file.file_type}' AND file_id = '#{woc_file.file_id}'")
 		if file_row.nil?
@@ -209,46 +232,7 @@ class MirrorWorker
 	
 end
 
-
-#CONFIG = YAML.load(File.open("#{ENV['HOME']}/.deisync.yml"))
-CONFIG = YAML.load(File.open("woc2rss.yml"))
-
-COURSES = CONFIG["courses"]
-YEARS = CONFIG["years"]
-#$ITEMS = 0
-#@worker = WocWorker.new(CONFIG['url'])
-#@worker.login!(CONFIG['username'], CONFIG['password'])
-#materialitems = Array.new
-#materialavaitems = Array.new
-#projects = Array.new
-#materialitems = @worker.get_generic_list("material", "422", "5")
-#materialavaitems += @worker.get_generic_list("materialavaliation", "422", "5")
-#projects += @worker.get_projects_list("422", "5")
-#
-#puts "meterial"
-#materialitems.each do |item|
-#	puts item.title 
-#end
-#$ITEMS += materialitems.size
-#puts materialitems.size
-#puts ".----------------------------------"
-#puts "meterial avaliacao"
-#materialavaitems.each do |item|
-#	puts item.title
-#end
-#$ITEMS += materialavaitems.size
-#puts materialavaitems.size
-#puts ".----------------------------------"
-#puts "meterial avaliacao"
-#projects.each do |item|
-#	puts item.title
-#end
-#$ITEMS += projects.size
-#	puts projects.size
-#	
-#puts "TOTAL #{$ITEMS}"
-#	419 -> 39
-# 	422 -> 27
+#Build the rss feed
 class WocRssBuilder
 	
 	def initialize(course_id, year_id, env)
@@ -259,7 +243,7 @@ class WocRssBuilder
 		@worker_num = CONFIG["mirror_workers"]
 		@missing_workers = @worker_num
 		#woc queue
-		@woc_items = Array.new
+		@woc_items = Array.new #This will store the items coming from WocWorkers so since it's a shared resource, must be synchronized
 		@woc_mutex = Mutex.new
 		@missing_producers = 3 #projects, material and avaliation material
 		@producers_mutex = Mutex.new
@@ -267,7 +251,7 @@ class WocRssBuilder
 		@workers_mutex = Mutex.new
 		@workers_cv = ConditionVariable.new
 		#mirror queue
-		@mirror_items = Array.new
+		@mirror_items = Array.new #needs to be synchronized when mirror workers are producing items
 		@mirror_mutex = Mutex.new
 		#worker instances
 		@mirror_workers = Array.new
@@ -275,7 +259,7 @@ class WocRssBuilder
 	end
 	
 	def build_rss
-
+		
 		#spawn one thread to download the material avaliation items
 		@woc_workers << Thread.new do
 			woc_worker = WocWorker.new(CONFIG['url'])
@@ -318,7 +302,7 @@ class WocRssBuilder
 			}
 		end
 		
-		#wait for all resources
+		#wait for all resources to finish
 		@producers_mutex.synchronize {
 			while @missing_producers > 0 do
 				@producers_cv.wait(@producers_mutex)
@@ -326,25 +310,32 @@ class WocRssBuilder
 		}
 
 		#spawn worker_num threads to mirror the woc items
+		#they take items from @woc_items, check if the files are already mirrored or if they need to be mirrored and put the
+		#mirrored item in @mirror_items array
 		@worker_num.times do
 			@mirror_workers << Thread.new(MirrorWorker.new) do |mirror_worker|
 			begin
 				items_num = 0
-				#threads die when all resources were consumed
+				
+				#get items missing
 				@woc_mutex.synchronize {
 					items_num = @woc_items.size
 				}
 				
+				#threads die when all resources were consumed
 				while items_num > 0 do
-					#puts "estou a espera do woc_mutex"
+					
+					#take one item from @woc_items
 					@woc_mutex.synchronize {
 						@item = @woc_items.pop
 					}
 					
+					#mirror the item and set the fields related to the mirroring
 					file_row = mirror_worker.mirror_filename(@item)
 					@item.filename = file_row[0]
 					@item.file_length = file_row[1]
 					
+					#put that item in @mirror_items for later treatment
 					@mirror_mutex.synchronize {
 						@mirror_items << @item
 					}
@@ -354,6 +345,7 @@ class WocRssBuilder
 						items_num = @woc_items.size
 					}
 				end
+				#There are no more items, this thread's work is done, send signal!
 				@workers_mutex.synchronize {
 					@missing_workers -= 1
 					@workers_cv.signal
@@ -365,12 +357,14 @@ class WocRssBuilder
 			end
 		end
 		
+		#wait for all mirror workers to finish their jobs before building the xml
 		@workers_mutex.synchronize {
 			while @missing_workers > 0 do
 				@workers_cv.wait(@workers_mutex)
 			end
 		}
-			
+		
+		#build the rss feed
   		version = "2.0"
   		content = RSS::Maker.make(version) do |m|
   			m.channel.title = CONFIG["course_names"][@course_id]
@@ -380,10 +374,12 @@ class WocRssBuilder
   	
 			puts "array size #{@mirror_items.size}"
 		
+				#for each item in @mirror_items, grab one and add it to the feed
 				while @mirror_items.size > 0 do
   					item = @mirror_items.pop
   			
-  				   # $ITEMS +=1
+  				   ################DEBUG!##################
+				   # $ITEMS +=1
 				   # puts "--------------------ITEM #{$ITEMS}-----------------"
   				   # puts "title: #{item.title}"
 				   # puts "link: https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
@@ -391,16 +387,21 @@ class WocRssBuilder
 				   # puts "end_length: #{item.file_length.to_s}"
 				   # puts "date: #{item.published_at}"
 				   # puts "-----------------------------------------------------"
-			
-  					#build the item
+				   #######################################
+  					
+					#build the item
   					i = m.items.new_item
   					i.title = item.title
+
 					#arrange description
 					composed_description = "#{item.description}<br/>" || ""
 					composed_description += item.sec_description || ""
   					i.description = composed_description
-  					i.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
-  					i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{item.filename}"
+  					
+					i.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
+  					
+					#enclosure stuff
+					i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{item.filename}"
   					i.enclosure.length = item.file_length.to_s
   					i.enclosure.type = "application/octet-stream"
   					unless item.published_at.nil?
@@ -409,16 +410,18 @@ class WocRssBuilder
   						i.date = Time.now
   					end
   				end
-	
-			#puts "ITEMS -> #{$ITEMS}"
-			#$ITEMS = 0
+		
 		end
+		#DEBUG
 		#puts content
+		#puts "ITEMS -> #{$ITEMS}"
+		#$ITEMS = 0
 		return content.to_s
 	end
 	
 end
 
+#Translate year string to year_id or return nil if year string is invalid
 def translate_year(year_string)
 	if CONFIG["years"][year_string].nil?
 		return nil
@@ -427,6 +430,7 @@ def translate_year(year_string)
 	end
 end
 
+#Translate course string to course_id or return nil if course string is invalid
 def translate_course(course_string)
 	if CONFIG["courses"][course_string].nil?
 		return nil
@@ -435,15 +439,19 @@ def translate_course(course_string)
 	end
 end
 
+#Rack application
 app = proc do |env|
 	
+	#extract path to use as parameters
 	path_bits = env["REQUEST_PATH"].split("/")
 	
+	#translate parameters to year_id and course_id
 	if path_bits.size == 3
 		year_id = translate_year(path_bits[1])
 		course_id = translate_course(path_bits[2])
 	end
 	
+	#Serve xml feed, error or static file
 	if path_bits[1] == "mirror"
 		[200, { 'Content-Type' => 'text/html' }, "Static file!"]
 	elsif not year_id.nil? and not course_id.nil?
@@ -454,3 +462,39 @@ app = proc do |env|
 	end
 end
 Rack::Handler::Mongrel.run(app, :Port => 3000)
+
+
+###################DEBUG################
+#$ITEMS = 0
+#@worker = WocWorker.new(CONFIG['url'])
+#@worker.login!(CONFIG['username'], CONFIG['password'])
+#materialitems = Array.new
+#materialavaitems = Array.new
+#projects = Array.new
+#materialitems = @worker.get_generic_list("material", "422", "5")
+#materialavaitems += @worker.get_generic_list("materialavaliation", "422", "5")
+#projects += @worker.get_projects_list("422", "5")
+#
+#puts "material"
+#materialitems.each do |item|
+#	puts item.title 
+#end
+#$ITEMS += materialitems.size
+#puts materialitems.size
+#puts ".----------------------------------"
+#puts "meterial avaliacao"
+#materialavaitems.each do |item|
+#	puts item.title
+#end
+#$ITEMS += materialavaitems.size
+#puts materialavaitems.size
+#puts ".----------------------------------"
+#puts "meterial avaliacao"
+#projects.each do |item|
+#	puts item.title
+#end
+#$ITEMS += projects.size
+#	puts projects.size
+#	
+#puts "TOTAL #{$ITEMS}"
+#########################################
