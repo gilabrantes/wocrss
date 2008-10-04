@@ -1,0 +1,142 @@
+url: woc.dei.uc.pt
+username: <username>
+password: <password>
+
+db_filename: mirror_database.db
+download_retries: 5
+mirror_workers: 5
+mirror_host: localhost/mirror
+mirror_path: <mirror_complete_path>
+
+years: #year ids
+  0809: 6
+  0708: 5
+  0607: 4
+    
+courses: #courses ids
+  alga: 242 #Algebra
+  am1: 245 #Analise Matematica 1
+  ed: 244 #Estruturas discretas
+  iprp: 240 #Introdução a programaçao e resolucao de problemas
+  tcomp: 241 #Tecnologias de computadores
+  am2: 251 #Analise Matematica 2
+  ac: 247 #Arquitectura de computadores
+  est: 249 #Estatistica
+  ppp: 246 #Principios de programaçao procedimental
+  tfm: 250 #Topicos de Fisica Moderna
+  irc: 252 #Introdução as redes de comunicacao
+  poo: 253 #Programação orientada a objectos
+  so: 254 #Sistemas operativos
+  tc: 255 #Teoria da computação
+  ti: 256 #Teoria da informação
+  aed: 262 #Algoritmos e Estruturas de dados
+  atd: 261 #Analise e transformaçao de dados
+  mm: 259 #Multimedia
+  pc: 258 #Protocolos de comunicação
+  scc: 324 #Simulação e computação cientifica
+  at: 503 #Aplicações telematicas
+  bd: 267 #Bases de dados
+  ca: 427 #Computaçao adaptativa
+  ct: 266 #Comunicação Tecnica
+  es: 263 #Engenharia de software
+  fsc: 505 #Fundamentos de sistemas de comunicação
+  gsi: 506 #Gestão de sistemas de informação
+  gsr: 419 #Gestão de sistemas de redes
+  im: 507 #Informatica medica
+  is: 422 #Integração de sistemas
+  ia: 508 #Inteligencia artificial
+  mrc: 441 #Mobilidade em Redes de Comunicação
+  ma: 443 #Multimedia e apendizagem
+  occi: 439 #Organização,Comp,Conhecimento e Inov 
+  pgi: 264 #Processos de Gestão e Inovação
+  rs: 510 #Reutilização de Software
+  ssc: 511 #Segurança em Sistemas de Comunicação 
+  sd: 265 #Sistemas Distribuidos
+  trp: 513 #Técnicas de Reconhecimento de Padrões 
+  tac: 514 #Tópicos Avançados de Comunicações 
+  ws: 515 #Websemantica
+  ai: 470 #Aplicações para a Internet
+  comp: 271 #compiladores
+  cad: 471 #Computação de Alto Desempenho
+  ce: 472 #Computação Evolucionária
+  cg: 269 #Computaçao grafica
+  er: 473 #engenharia de redes
+  edj: 474 #Estudo e Desenvolvimento de Jogos
+  ge: 475 #Gestão de Empresas
+  gps: 476 #Gestão de Projectos de Software
+  in: 477 #Inteligência no Negócio
+  ihc: 478 #Interacção Humano-Computador
+  iia: 270 #Introdução à Inteligência Artificial
+  lc: 479 #Laboratório de Comunicações
+  lpa: 272 #Laboratório de Programação Avançada
+  mdr: 480 #Modelação e Desempenho de Redes
+  ma: 481 #Multimédia Avançada
+  pgp: 482 #Planeamento e Gestão de Produção
+  sgd: 483 #Sistemas de Gestão de Dados
+  si: 268 #Sistemas de Informação
+  sigc: 484 #Sistemas Inteligentes Gestão Conhecimento 
+  su: 485 #Sistemas Ubíquos
+  
+course_names:
+  242: Algebra
+  245: Analise Matematica 1
+  244: Estruturas discretas
+  240: Introdução a programaçao e resolucao de problemas
+  241: Tecnologias de computadores
+  251: Analise Matematica 2
+  247: Arquitectura de computadores
+  249: Estatistica
+  246: Principios de programaçao procedimental
+  250: Topicos de Fisica Moderna
+  252: Introdução as redes de comunicacao
+  253: Programação orientada a objectos
+  254: Sistemas operativos
+  255: Teoria da computação
+  256: Teoria da informação
+  262: Algoritmos e Estruturas de dados
+  261: Analise e transformaçao de dados
+  259: Multimedia
+  258: Protocolos de comunicação
+  324: Simulação e computação cientifica
+  503: Aplicações telematicas
+  267: Bases de dados
+  427: Computaçao adaptativa
+  266: Comunicação Tecnica
+  263: Engenharia de software
+  505: Fundamentos de sistemas de comunicação
+  506: Gestão de sistemas de informação
+  419: Gestão de sistemas de redes
+  507: Informatica medica
+  422: Integração de sistemas
+  508: Inteligencia artificial
+  441: Mobilidade em Redes de Comunicação
+  443: Multimedia e apendizagem
+  439: Organização,Comp,Conhecimento e Inov 
+  264: Processos de Gestão e Inovação
+  510: Reutilização de Software
+  511: Segurança em Sistemas de Comunicação 
+  265: Sistemas Distribuidos
+  513: Técnicas de Reconhecimento de Padrões 
+  514: Tópicos Avançados de Comunicações 
+  515: Websemantica
+  470: Aplicações para a Internet
+  271: Compiladores
+  471: Computação de Alto Desempenho
+  472: Computação Evolucionária
+  269: Computaçao grafica
+  473: Engenharia de redes
+  474: Estudo e Desenvolvimento de Jogos
+  475: Gestão de Empresas
+  476: Gestão de Projectos de Software
+  477: Inteligência no Negócio
+  478: Interacção Humano-Computador
+  270: Introdução à Inteligência Artificial
+  479: Laboratório de Comunicações
+  272: Laboratório de Programação Avançada
+  480: Modelação e Desempenho de Redes
+  481: Multimédia Avançada
+  482: Planeamento e Gestão de Produção
+  483: Sistemas de Gestão de Dados
+  268: Sistemas de Informação
+  484: Sistemas Inteligentes Gestão Conhecimento 
+  485: Sistemas Ubíquos
