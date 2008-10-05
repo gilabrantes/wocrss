@@ -235,9 +235,10 @@ end
 #Build the rss feed
 class WocRssBuilder
 	
-	def initialize(course_id, year_id, env)
+	attr_reader :cached_rss
+	
+	def initialize(course_id, year_id)
 		#puts "GO!"
-		@env = env
 		@course_id = course_id
 		@year_id = year_id
 		@worker_num = CONFIG["mirror_workers"]
@@ -256,10 +257,11 @@ class WocRssBuilder
 		#worker instances
 		@mirror_workers = Array.new
 		@woc_workers = Array.new
+		#update cache!
+		cached_rss
 	end
 	
 	def build_rss
-		
 		#spawn one thread to download the material avaliation items
 		@woc_workers << Thread.new do
 			woc_worker = WocWorker.new(CONFIG['url'])
@@ -419,6 +421,49 @@ class WocRssBuilder
 		return content.to_s
 	end
 	
+	def cached_rss
+		@cached_rss ||= build_rss
+	end
+	
+end
+
+class WoCFeedCache
+	
+	def initialize
+		@builders = Hash.new
+		build_cache
+		start_cache_renew_job
+	end
+	
+	def build_cache
+		for year in CONFIG["years"]
+			@builders[year[1]] = Hash.new
+			for course in CONFIG["courses"]
+				@builders[year[1]][course[1]] = WocRssBuilder.new(course[1], year[1])
+			end
+		end
+	end
+	
+	def cached_feed(course_id, year_id)
+		@builders[year_id][course_id].cached_rss
+	end
+	
+	private
+	
+	#spawn a thread that refreshes cache periodically
+	def start_cache_renew_job
+		Thread.new do
+			loop do
+				for year in @builders
+					for course_builder in year
+						course_builder.cached_rss #refreshes the cache for each builder
+					end
+				end
+				sleep(CONFIG["cache_interval"]*60) #the cache is valid for this period of time
+			end
+		end
+	end
+	
 end
 
 #Translate year string to year_id or return nil if year string is invalid
@@ -439,6 +484,79 @@ def translate_course(course_string)
 	end
 end
 
+#Create an html file containing all feeds available
+def feed_list_html(env)
+	page = ""
+	page << '<?xml version="1.0" encoding="UTF-8"?>
+		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+		<html xmlns="http://www.w3.org/1999/xhtml"
+		     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
+		     xml:lang="en" >
+			<head>
+				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>
+			</head>
+			<body>'
+			page << '<dl>'
+			for year in CONFIG["years"] do
+				page << "<dt>#{year[0]}:</dt>"
+				page << '<dd>'
+				page << '<dl>'
+				for course in CONFIG["courses"] do
+					page << "<dt>#{CONFIG["course_names"][course[1]]}</dt>"
+					page << "<dd>"
+					page << "<a href=\"http://#{env["HTTP_HOST"]}/#{year[0]}/#{course[0]}/rss.xml\">http://#{env["HTTP_HOST"]}/#{year[0]}/#{course[0]}/rss.xml</a>"
+					page << "</dd>"
+				end
+				page << '</dl>'
+				page << '</dd>'
+			end
+			page << '</dl>'
+		page << 		
+			'</body>
+		</html>'
+		return page
+end
+
+#404 html
+def error_html
+	page = ""
+	page << '
+		<?xml version="1.0" encoding="UTF-8"?>\n
+		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"> \n
+		<html xmlns="http://www.w3.org/1999/xhtml"
+		     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
+		     xml:lang="en" > \n
+			<head>\n
+				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>\n
+			</head>\n
+			<body> You have requested something stupid, review your url and make sure that its correct' 		
+		page << '</body>
+		</html>'
+end
+
+#static file html
+def static_file_html
+	page = ""
+	page << '
+		<?xml version="1.0" encoding="UTF-8"?>\n
+		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"> \n
+		<html xmlns="http://www.w3.org/1999/xhtml"
+		     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
+		     xml:lang="en" > \n
+			<head>\n
+				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>\n
+			</head>\n
+			<body>static file!'		
+		page <<'</body>
+		</html>'
+end
+
 #Rack application
 app = proc do |env|
 	
@@ -453,16 +571,19 @@ app = proc do |env|
 	
 	#Serve xml feed, error or static file
 	if path_bits[1] == "mirror"
-		[200, { 'Content-Type' => 'text/html' }, "Static file!"]
+		[200, { 'Content-Type' => 'application/xhtml+xml' }, static_file_html]
+	elsif path_bits[1].nil?
+		[200, { 'Content-Type' => 'application/xhtml+xml' }, feed_list_html(env)]
 	elsif not year_id.nil? and not course_id.nil?
-			builder = WocRssBuilder.new(course_id, year_id, env)
-			[200, { 'Content-Type' => 'application/xhtml+xml' }, builder.build_rss]
+			[200, { 'Content-Type' => 'application/xhtml+xml' }, @cache.cached_feed(course_id, year_id)]
 	else
-		[404, { 'Content-Type' => 'text/html'}, "Erro bodes e assim!"]
+		[404, { 'Content-Type' => 'application/xhtml+xml'}, error_html]
 	end
 end
+#setup cache
+@cache = WoCFeedCache.new
+#setup rack
 Rack::Handler::Mongrel.run(app, :Port => 3000)
-
 
 ###################DEBUG################
 #$ITEMS = 0
