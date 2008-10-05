@@ -1,19 +1,3 @@
-require 'rubygems'
-require "net/http"
-require "net/https"
-require "yaml"
-require "hpricot"
-require "rss/maker"
-require 'rack'
-require 'thread'
-require 'sqlite3'
-require 'monitor.rb'
-
-#Config file is loaded
-CONFIG = YAML.load(File.open("woc2rss.yml"))
-COURSES = CONFIG["courses"]
-YEARS = CONFIG["years"]
-
 #Represent a WoC file
 #The file_id and file_type are the values used to download them from WoC
 #Published_at is used to date the rss item
@@ -559,7 +543,8 @@ end
 
 #Rack application
 app = proc do |env|
-	
+	#setup cache
+	@cache = WoCFeedCache.new
 	#extract path to use as parameters
 	path_bits = env["REQUEST_PATH"].split("/")
 	
@@ -580,10 +565,7 @@ app = proc do |env|
 		[404, { 'Content-Type' => 'application/xhtml+xml'}, error_html]
 	end
 end
-#setup cache
-@cache = WoCFeedCache.new
-#setup rack
-Rack::Handler::Mongrel.run(app, :Port => 3000)
+
 
 ###################DEBUG################
 #$ITEMS = 0
