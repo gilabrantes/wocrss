@@ -3,7 +3,7 @@
 #Published_at is used to date the rss item
 #Both description and sec_description (secondary description) are concatenated and used as description of the rss item
 class WocFile
-	attr_accessor :title, :description, :sec_description, :file_id, :file_type, :filename, :file_length, :published_at	
+	attr_accessor :title, :description, :sec_description, :file_id, :file_type, :filename, :mirror_filename, :file_length, :published_at, :year, :course, :section	
 end
 
 #WocWorker handles all the scrapping and information extraction from WoC.
@@ -41,12 +41,15 @@ class WocWorker
 	#The valid values to list argument are "material" or "materialavaliation"
 	#
 	#NOTE: This should use an authenticated worker
-	def get_generic_list(list, file_id, year_id)
+	def get_generic_list(list, course_id, year_id)
 		#https://www.dei.uc.pt/weboncampus/class/getxxx.do?idclass=419&idyear=6
 		@materials = Array.new
 		tmp = WocFile.new
+		tmp.year = year_id
+		tmp.course = course_id
+		tmp.section = list
 		
-  		response = self.auth_get("/weboncampus/class/get#{list}.do?idclass=#{file_id}&idyear=#{year_id}")
+  		response = self.auth_get("/weboncampus/class/get#{list}.do?idclass=#{course_id}&idyear=#{year_id}")
 		doc = Hpricot(response.body).search("td[@class='contentcell]")[1].search("table")[3].search("td").each do |td|
 	   		case td.inner_html.strip
  	   		when /^&nbsp;$/
@@ -85,11 +88,15 @@ class WocWorker
 	#Get all the items in the projects section and returns an array of projects
 	#
 	#NOTE: This should use an authenticated worker
-	def get_projects_list(class_id, year_id)
+	def get_projects_list(course_id, year_id)
 		#https://www.dei.uc.pt/weboncampus/class/getprojects.do?idclass=419&idyear=6
 		@projects = Array.new
 		tmp = WocFile.new
-		response = self.auth_get("/weboncampus/class/getprojects.do?idclass=#{class_id}&idyear=#{year_id}")
+		tmp.year = year_id
+		tmp.course = course_id
+		tmp.section = "projects"
+		
+		response = self.auth_get("/weboncampus/class/getprojects.do?idclass=#{course_id}&idyear=#{year_id}")
 		doc = Hpricot(response.body).search("td[@class='contentcell]")[1].search("table")[1].search("td").each do |td|
 			case td.inner_html
 			when /^\s*<strong>.*<\/strong>\s*$/
@@ -192,18 +199,25 @@ class MirrorWorker
 			@download_retries -= 1
 			retry unless @download_retries >= 0
 		end
-		new_file = File.new("#{@mirror_path}/#{file_data[0]}", 'w')
+		
+		#create unique filename
+		#mirror_filename = unique_filename(file_data[0])
+		
+		path = "#{woc_file.year}/#{woc_file.course}/#{woc_file.section}"
+		FileUtils.mkdir_p(path)
+		
+		new_file = File.new("#{@mirror_path}/#{path}/#{file_data[0]}", 'w')
 		new_file.write(file_data[2])
 		new_file.close
 		
 		#insert db entry
-		@db.execute("INSERT INTO mirror_files (file_id, file_type, filename, length, published_at) VALUES ('#{woc_file.file_id}','#{woc_file.file_type}','#{file_data[0]}','#{file_data[1]}','#{woc_file.published_at}')")
+		@db.execute("INSERT INTO mirror_files (file_id, file_type, filename, mirror_filename, length, published_at, year, course, section) VALUES ('#{woc_file.file_id}','#{woc_file.file_type}','#{file_data[0]}','#{file_data[1]}','#{woc_file.published_at}','#{woc_file.year.to_i}','#{woc_file.course}','#{woc_file.section}')")
 		
 		return file_data		
 	end
 	
 	#Checks if the file is mirrored, and mirror in case that its not.
-	#Returns an array containing filename, file length and pucliched_at
+	#Returns an array containing filename, file length and published_at
 	def mirror_filename(woc_file)
 		file_row = @db.get_first_row("SELECT filename, length, published_at FROM mirror_files WHERE file_type = '#{woc_file.file_type}' AND file_id = '#{woc_file.file_id}'")
 		if file_row.nil?
@@ -213,6 +227,18 @@ class MirrorWorker
 			return file_row 
 		end
 	end
+	
+	private
+	
+	##Thank you Lloyd Linklater (http://www.ruby-forum.com/user/show/6864) - http://www.ruby-forum.com/topic/165979
+	#def unique_filename(base_filename)
+	#	5.times { base_filename << random_letter }
+	#	base_filename
+	#end
+	#
+	#def random_letter
+	#	rand_letter = 65 + rand(26)
+	#end
 	
 end
 
@@ -387,7 +413,8 @@ class WocRssBuilder
 					i.link = "https://woc.dei.uc.pt/weboncampus/class/getpresentation.do?idclass=#{@course_id}"
   					
 					#enclosure stuff
-					i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{item.filename}"
+					path = "#{item.year}/#{item.course}/#{item.section}"
+					i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{path}/#{item.filename}"
   					i.enclosure.length = item.file_length.to_s
   					i.enclosure.type = "application/octet-stream"
   					unless item.published_at.nil?
@@ -540,6 +567,31 @@ def static_file_html
 		page <<'</body>
 		</html>'
 end
+
+
+class WocRssApplication
+	def call(env)
+		#extract path to use as parameters
+		path_bits = env["REQUEST_PATH"].split("/")
+
+		#translate parameters to year_id and course_id
+		if path_bits.size == 3
+			year_id = translate_year(path_bits[1])
+			course_id = translate_course(path_bits[2])
+		end
+
+		#Serve xml feed, error or static file
+		if path_bits[1] == "mirror"
+			[200, { 'Content-Type' => 'application/xhtml+xml' }, static_file_html]
+		elsif path_bits[1].nil?
+			[200, { 'Content-Type' => 'application/xhtml+xml' }, feed_list_html(env)]
+		elsif not year_id.nil? and not course_id.nil?
+				[200, { 'Content-Type' => 'application/xhtml+xml' }, @@cache.cached_feed(course_id, year_id)]
+		else
+			[404, { 'Content-Type' => 'application/xhtml+xml'}, error_html]
+		end
+	end #call
+end #WocRssApplication
 
 
 ###################DEBUG################

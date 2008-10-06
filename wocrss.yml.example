@@ -11,7 +11,6 @@ mirror_path: <mirror_complete_path>
 years: #year ids
   0809: 6
   0708: 5
-  0607: 4
     
 courses: #courses ids
   alga: 242 #Algebra
@@ -140,3 +139,7 @@ course_names:
   268: Sistemas de Informação
   484: Sistemas Inteligentes Gestão Conhecimento 
   485: Sistemas Ubíquos
+
+year_names: #year names
+  6: 0809
+  5: 0708
