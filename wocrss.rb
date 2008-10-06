@@ -570,6 +570,11 @@ end
 
 
 class WocRssApplication
+	
+	def initialize
+		setup_cache
+	end
+	
 	def call(env)
 		#extract path to use as parameters
 		path_bits = env["REQUEST_PATH"].split("/")
@@ -590,6 +595,13 @@ class WocRssApplication
 		else
 			[404, { 'Content-Type' => 'application/xhtml+xml'}, error_html]
 		end
+		
+		private
+		
+		def setup_cache
+			@@cache = WoCFeedCache.new
+		end
+		
 	end #call
 end #WocRssApplication
 
