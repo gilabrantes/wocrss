@@ -19,6 +19,7 @@ class WocWorker
 	attr_accessor :conn #HTTP connection
 	
 	def initialize(url)
+		@@year_names =| CONFIG["years"].invert
 		@cookies = Hash.new
 		@conn = Net::HTTP.new(url, 443)
 		@conn.use_ssl = true
@@ -51,7 +52,7 @@ class WocWorker
 	def get_generic_list(list, course_id, year_id)
 		#https://www.dei.uc.pt/weboncampus/class/getxxx.do?idclass=419&idyear=6
 		@materials = Array.new
-		tmp = WocFile.new(:year => year_id, :course => course_id, :section => list)
+		tmp = WocFile.new(:year => @@year_names[year_id], :course => CONFIG["course_names"][course_id], :section => list)
 		
   		response = self.auth_get("/weboncampus/class/get#{list}.do?idclass=#{course_id}&idyear=#{year_id}")
 		doc = Hpricot(response.body).search("td[@class='contentcell]")[1].search("table")[3].search("td").each do |td|
@@ -95,7 +96,7 @@ class WocWorker
 	def get_projects_list(course_id, year_id)
 		#https://www.dei.uc.pt/weboncampus/class/getprojects.do?idclass=419&idyear=6
 		@projects = Array.new
-		tmp = WocFile.new(:year => year_id, :course => course_id, :section => "projects")
+		tmp = WocFile.new(:year => @@year_names[year_id], :course => CONFIG["course_names"][course_id], :section => "projects")
 		
 		response = self.auth_get("/weboncampus/class/getprojects.do?idclass=#{course_id}&idyear=#{year_id}")
 		doc = Hpricot(response.body).search("td[@class='contentcell]")[1].search("table")[1].search("td").each do |td|
@@ -442,8 +443,8 @@ class WoCFeedCache
 	
 	def build_cache
 		return if self.exist?
-		@builders.each_value do |year_array|
-			year_array.each_value do |course_builder|
+		@builders.each_pair do |year, course_array|
+			course_array.each do |course_builder|
 				fresh_feed = course_builder.updated_rss
 				@db.execute("INSERT INTO cached_rss VALUES ('#{course_builder.year_id}', '#{course_builder.course_id}', '#{fresh_feed}', '#{Time.now.strftime("%Y%m%d%H%M").to_s}')")
 			end
@@ -451,8 +452,8 @@ class WoCFeedCache
 	end
 	
 	def exist?
-		@builders.each_value do |year_array|
-			year_array.each_value do |course_builder|
+		@builders.each_pair do |year, course_array|
+			course_array.each do |course_builder|
 				rows = @db.execute("SELECT updated_at FROM cached_rss WHERE course_id = '#{course_builder.course_id}' AND year_id = '#{course_builder.year_id}'")
 				if rows.size == 0 #inexistent or corrupted cache
 					delete_cache
@@ -464,8 +465,8 @@ class WoCFeedCache
 	end
 	
 	def update_cache
-		@builders.each_value do |year_array|
-			year_array.each_value do |course_builder|
+		@builders.each_pair do |year, course_array|
+			course_array.each do |course_builder|
 				fresh_feed = course_builder.updated_rss
 				@db.execute("UPDATE cached_rss SET year_id = '#{course_builder.year_id}', course_id = '#{course_builder.course_id}', rss = '#{fresh_feed}', updated_at = '#{Time.now.strftime("%Y%m%d%H%M").to_s}' ")
 			end
