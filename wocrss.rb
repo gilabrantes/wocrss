@@ -1,3 +1,8 @@
+#Config file is loaded
+CONFIG = YAML.load(File.open("wocrss.yml"))
+COURSES = CONFIG["courses"]
+YEARS = CONFIG["years"]
+
 #Represent a WoC file
 #The file_id and file_type are the values used to download them from WoC
 #Published_at is used to date the rss item
@@ -19,7 +24,7 @@ class WocWorker
 	attr_accessor :conn #HTTP connection
 	
 	def initialize(url)
-		@@year_names =| CONFIG["years"].invert
+		@@year_names ||= YEARS.invert
 		@cookies = Hash.new
 		@conn = Net::HTTP.new(url, 443)
 		@conn.use_ssl = true
@@ -62,7 +67,7 @@ class WocWorker
  	   		when /<strong>.*<\/strong>$/
 	   			#title
 				#puts 1
-	   			tmp = WocFile.new(:year => year_id, :course => course_id, :section => list)
+	   			tmp = WocFile.new(:year => @@year_names[year_id], :course => CONFIG["course_names"][course_id], :section => list)
 	   			tmp.title = td.inner_html.match(/<strong>(.*)<\/strong>/)[1]
 	   		when /<strong>Tema: <\/strong>(.*)/
 	   			#description
@@ -97,13 +102,12 @@ class WocWorker
 		#https://www.dei.uc.pt/weboncampus/class/getprojects.do?idclass=419&idyear=6
 		@projects = Array.new
 		tmp = WocFile.new(:year => @@year_names[year_id], :course => CONFIG["course_names"][course_id], :section => "projects")
-		
 		response = self.auth_get("/weboncampus/class/getprojects.do?idclass=#{course_id}&idyear=#{year_id}")
 		doc = Hpricot(response.body).search("td[@class='contentcell]")[1].search("table")[1].search("td").each do |td|
 			case td.inner_html
 			when /^\s*<strong>.*<\/strong>\s*$/
 				#title
-				tmp = WocFile.new(:year => year_id, :course => course_id, :section => "projects")
+				tmp = WocFile.new(:year => @@year_names[year_id], :course => CONFIG["course_names"][course_id], :section => "projects")
 				tmp.title = td.inner_html.match(/<strong>(.*)<\/strong>/)[1]
 			when /\s*<table(.|\n)*/
 				next
@@ -209,7 +213,7 @@ class MirrorWorker
 		new_file.close
 		
 		#insert db entry
-		@db.execute("INSERT INTO mirror_files (file_id, file_type, filename, length, published_at, year, course, section) VALUES ('#{woc_file.file_id}','#{woc_file.file_type}','#{file_data[0]}','#{file_data[1]}','#{woc_file.published_at}','#{woc_file.year.to_i}','#{woc_file.course}','#{woc_file.section}')")
+		@db.execute("INSERT INTO mirror_files (file_id, file_type, filename, length, published_at, year, course, section) VALUES (? ,? ,? ,? ,? ,? ,? ,? )", woc_file.file_id, woc_file.file_type, file_data[0], file_data[1], woc_file.published_at, woc_file.year.to_i, woc_file.course, woc_file.section)
 		
 		return file_data		
 	end
@@ -217,7 +221,7 @@ class MirrorWorker
 	#Checks if the file is mirrored, and mirror in case that its not.
 	#Returns an array containing filename, file length and published_at
 	def mirror_filename(woc_file)
-		file_row = @db.get_first_row("SELECT filename, length, published_at FROM mirror_files WHERE file_type = '#{woc_file.file_type}' AND file_id = '#{woc_file.file_id}'")
+		file_row = @db.get_first_row("SELECT filename, length, published_at FROM mirror_files WHERE file_type = ? AND file_id = ?", woc_file.file_type, woc_file.file_id)
 		if file_row.nil?
 			file_row = self.mirror_file(woc_file)
 			return file_row
@@ -438,23 +442,23 @@ class WoCFeedCache
 	end
 	
 	def cached_feed(course_id, year_id)
-		@db.get_first_value("SELECT rss FROM cached_rss WHERE course_id = '#{course_id} AND year_id = '#{year_id}'")
+		@db.get_first_value("SELECT rss FROM cached_rss WHERE course_id = ? AND year_id = ?", course_id, year_id)
 	end
 	
 	def build_cache
 		return if self.exist?
 		@builders.each_pair do |year, course_array|
-			course_array.each do |course_builder|
+			course_array.each_pair do |course, course_builder|
 				fresh_feed = course_builder.updated_rss
-				@db.execute("INSERT INTO cached_rss VALUES ('#{course_builder.year_id}', '#{course_builder.course_id}', '#{fresh_feed}', '#{Time.now.strftime("%Y%m%d%H%M").to_s}')")
+				@db.execute("INSERT INTO cached_rss VALUES (?, ?, ?, ?)",course_builder.year_id, course_builder.course_id, fresh_feed, Time.now.strftime("%Y%m%d%H%M").to_s)
 			end
 		end
 	end
 	
 	def exist?
 		@builders.each_pair do |year, course_array|
-			course_array.each do |course_builder|
-				rows = @db.execute("SELECT updated_at FROM cached_rss WHERE course_id = '#{course_builder.course_id}' AND year_id = '#{course_builder.year_id}'")
+			course_array.each_pair do |course, course_builder|
+				rows = @db.execute("SELECT updated_at FROM cached_rss WHERE course_id = ? AND year_id = ?", course_builder.course_id, course_builder.year_id)
 				if rows.size == 0 #inexistent or corrupted cache
 					delete_cache
 					return false
@@ -466,9 +470,9 @@ class WoCFeedCache
 	
 	def update_cache
 		@builders.each_pair do |year, course_array|
-			course_array.each do |course_builder|
+			course_array.each_pair do |course, course_builder|
 				fresh_feed = course_builder.updated_rss
-				@db.execute("UPDATE cached_rss SET year_id = '#{course_builder.year_id}', course_id = '#{course_builder.course_id}', rss = '#{fresh_feed}', updated_at = '#{Time.now.strftime("%Y%m%d%H%M").to_s}' ")
+				@db.execute("UPDATE cached_rss SET rss = ?, updated_at = ? WHERE SET year_id = ? AND course_id = ?", fresh_feed, Time.now.strftime("%Y%m%d%H%M").to_s, course_builder.year_id, course_builder.course_id)
 			end
 		end
 	end
@@ -585,9 +589,7 @@ end
 
 class WocRssApplication
 	
-	def initialize
-		setup_cache
-	end
+	@@cache = WoCFeedCache.new
 	
 	def call(env)
 		#extract path to use as parameters
@@ -608,12 +610,6 @@ class WocRssApplication
 				[200, { 'Content-Type' => 'application/xhtml+xml' }, @@cache.cached_feed(course_id, year_id)]
 		else
 			[404, { 'Content-Type' => 'application/xhtml+xml'}, error_html]
-		end
-		
-		private
-		
-		def setup_cache
-			@@cache = WoCFeedCache.new
 		end
 		
 	end #call

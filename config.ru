@@ -11,11 +11,5 @@ require 'monitor.rb'
 require "wocrss.rb"
 
 
-#Config file is loaded
-CONFIG = YAML.load(File.open("wocrss.yml"))
-COURSES = CONFIG["courses"]
-YEARS = CONFIG["years"]
-
-
 #Rack application
 run WocRssApplication.new

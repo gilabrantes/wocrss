@@ -11,14 +11,10 @@ require 'sqlite3'
 require 'monitor.rb'
 require "wocrss.rb"
 
-#Config file is loaded
-CONFIG = YAML.load(File.open("wocrss.yml"))
-COURSES = CONFIG["courses"]
-YEARS = CONFIG["years"]
-
 
 desc "Build or update a mirror of the files from all years and courses"
 task :update_cache do
+	
 	cache = WoCFeedCache.new
 	if cache.exist?
 		puts "Updating cache..."
