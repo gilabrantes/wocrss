@@ -1,4 +1,4 @@
+.gitignore
 mirror/*
 mirror_database.db
-.DS_Store
 wocrss.yml
