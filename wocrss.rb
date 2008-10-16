@@ -524,7 +524,7 @@ def feed_list_html(env)
 		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
 		     xml:lang="en" >
 			<head>
-				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>
+				<title>WoC scrapped feed list for '+CONFIG["host"].to_s+'</title>
 			</head>
 			<body>'
 			page << '<dl>'
@@ -560,7 +560,7 @@ def error_html
 		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
 		     xml:lang="en" >
 			<head>
-				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>
+				<title>WoC scrapped feed list for '+CONFIG["host"].to_s'</title>
 			</head>
 			<body> You have requested something stupid, review your url and make sure that its correct' 		
 		page << '</body>
@@ -579,7 +579,7 @@ def static_file_html
 		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
 		     xml:lang="en" >
 			<head>
-				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>
+				<title>WoC scrapped feed list for '+CONFIG["host"].to_s+'</title>
 			</head>
 			<body>static file!'		
 		page <<'</body>
