@@ -552,16 +552,16 @@ end
 def error_html
 	page = ""
 	page << '
-		<?xml version="1.0" encoding="UTF-8"?>\n
+		<?xml version="1.0" encoding="UTF-8"?>
 		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
-		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"> \n
+		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 		<html xmlns="http://www.w3.org/1999/xhtml"
 		     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
-		     xml:lang="en" > \n
-			<head>\n
-				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>\n
-			</head>\n
+		     xml:lang="en" >
+			<head>
+				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>
+			</head>
 			<body> You have requested something stupid, review your url and make sure that its correct' 		
 		page << '</body>
 		</html>'
@@ -571,16 +571,16 @@ end
 def static_file_html
 	page = ""
 	page << '
-		<?xml version="1.0" encoding="UTF-8"?>\n
+		<?xml version="1.0" encoding="UTF-8"?>
 		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
-		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"> \n
+		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 		<html xmlns="http://www.w3.org/1999/xhtml"
 		     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
-		     xml:lang="en" > \n
-			<head>\n
-				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>\n
-			</head>\n
+		     xml:lang="en" >
+			<head>
+				<title>WoC scrapped feed list for #{CONFIG["host"]}</title>
+			</head>
 			<body>static file!'		
 		page <<'</body>
 		</html>'
@@ -593,7 +593,7 @@ class WocRssApplication
 	
 	def call(env)
 		#extract path to use as parameters
-		path_bits = env["REQUEST_PATH"].split("/")
+		path_bits = env["REQUEST_URI"].split("/")
 
 		#translate parameters to year_id and course_id
 		if path_bits.size == 3
