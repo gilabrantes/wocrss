@@ -594,15 +594,16 @@ class WocRssApplication
 		path_bits = env["REQUEST_URI"].split("/")
 
 		#translate parameters to year_id and course_id
-		if path_bits.size == 3
-			year_id = translate_year(path_bits[1])
-			course_id = translate_course(path_bits[2])
+		path_size = path_bits.size
+		if path_size >= 3
+			year_id = translate_year(path_bits[path_size - 2])
+			course_id = translate_course(path_bits[path_size - 1])
 		end
 
 		#Serve xml feed, error or static file
-		if path_bits[1] == "mirror"
+		if path_bits[path_size - 2] == "mirror"
 			[200, { 'Content-Type' => 'application/xhtml+xml' }, static_file_html]
-		elsif path_bits[1].nil?
+		elsif path_bits[path_size - 2].nil?
 			[200, { 'Content-Type' => 'application/xhtml+xml' }, feed_list_html(env)]
 		elsif not year_id.nil? and not course_id.nil?
 				[200, { 'Content-Type' => 'application/xhtml+xml' }, @@cache.cached_feed(course_id, year_id)]
