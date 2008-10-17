@@ -472,7 +472,7 @@ class WoCFeedCache
 		@builders.each_pair do |year, course_array|
 			course_array.each_pair do |course, course_builder|
 				fresh_feed = course_builder.updated_rss
-				@db.execute("UPDATE cached_rss SET rss = ?, updated_at = ? WHERE SET year_id = ? AND course_id = ?", fresh_feed, Time.now.strftime("%Y%m%d%H%M").to_s, course_builder.year_id, course_builder.course_id)
+				@db.execute("UPDATE cached_rss SET rss = ?, updated_at = ? WHERE year_id = ? AND course_id = ?", fresh_feed, Time.now.strftime("%Y%m%d%H%M").to_s, course_builder.year_id, course_builder.course_id)
 			end
 		end
 	end
