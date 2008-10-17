@@ -298,7 +298,7 @@ class WocRssBuilder
 		@woc_workers << Thread.new do
 			woc_worker = WocWorker.new(CONFIG['url'])
 			woc_worker.login!(CONFIG['username'], CONFIG['password'])
-			items = woc_worker.get_generic_list("materialavaliation", course_id, year_id)
+			items = woc_worker.get_generic_list(material_name, course_id, year_id)
 			@woc_mutex.synchronize {
 				@woc_items += items
 			}
