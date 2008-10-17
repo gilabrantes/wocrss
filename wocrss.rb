@@ -551,8 +551,7 @@ end
 #404 html
 def error_html
 	page = ""
-	page << '
-		<?xml version="1.0" encoding="UTF-8"?>
+	page << '<?xml version="1.0" encoding="UTF-8"?>
 		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
 		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 		<html xmlns="http://www.w3.org/1999/xhtml"
@@ -560,7 +559,7 @@ def error_html
 		     xsi:schemaLocation="http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd"
 		     xml:lang="en" >
 			<head>
-				<title>WoC scrapped feed list for '+CONFIG["host"].to_s'</title>
+				<title>WoC scrapped feed list for '+CONFIG["host"].to_s+'</title>
 			</head>
 			<body> You have requested something stupid, review your url and make sure that its correct' 		
 		page << '</body>
@@ -570,8 +569,7 @@ end
 #static file html
 def static_file_html
 	page = ""
-	page << '
-		<?xml version="1.0" encoding="UTF-8"?>
+	page << '<?xml version="1.0" encoding="UTF-8"?>
 		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
 		"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 		<html xmlns="http://www.w3.org/1999/xhtml"
