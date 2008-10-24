@@ -408,7 +408,7 @@ class WocRssBuilder
 					
 				#enclosure stuff
 				path = "#{item.year}/#{item.course}/#{item.section}"
-				i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{path}/#{item.filename}"
+				i.enclosure.url = "http://#{CONFIG['mirror_host']}/#{URI.escape(path)}/#{URI.escape(item.filename)}"
 					i.enclosure.length = item.file_length.to_s
 					i.enclosure.type = "application/octet-stream"
 					unless item.published_at.nil?

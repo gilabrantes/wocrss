@@ -1,6 +1,7 @@
 require 'rubygems'
 require "net/http"
 require "net/https"
+require 'uri'
 require "yaml"
 require 'hpricot'
 require "rss/maker"
